@@ -1,6 +1,6 @@
-# OpenAutoRC 🚗🤖 
+# Autonomous RC Platform 🚗🤖 
 
-OpenAutoRC is an open-source framework designed to transform affordable, off-the-shelf RC cars into fully autonomous, computer-vision-powered vehicles. 
+Autonomous RC Platform is an open-source framework designed to transform affordable, off-the-shelf RC cars into fully autonomous, computer-vision-powered vehicles. 
 
 This repository currently serves as the foundational **Control Layer**. We have successfully reverse-engineered the proprietary Bluetooth Low Energy (BLE) protocols used by generic RC toys (like the `YC_CAR_DEMO`). By breaking these cars out of their restrictive mobile apps, we can now control them programmatically from any computer, paving the way for the next phase: **Autonomous AI Driving**.
 
@@ -33,8 +33,8 @@ While we build the Computer Vision models, this repository currently functions a
 ### Installation
 ```bash
 # Clone the repository
-git clone https://github.com/ossgenesis/OpenAutoRC.git
-cd OpenAutoRC
+git clone https://github.com/ossgenesis/autonomous-rc-platform.git
+cd autonomous-rc-platform
 
 # Create a virtual environment
 python3 -m venv venv
