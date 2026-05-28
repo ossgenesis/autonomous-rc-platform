@@ -33,16 +33,16 @@ Ownership tags:
 ### Phase 2 — Video Telemetry & Data Collection
 _See [PHASE2_PLAN.md](PHASE2_PLAN.md) for full architecture._
 
-- [ ] **[USER]** M1a: Confirm phone OS (iOS / Android) and DJI Mimo version supports RTMP push
-- [ ] **[USER]** M1b: Mount DJI Action 2 on RC car, document mount geometry (height, tilt, offset)
-- [ ] **[CLAUDE]** M1c: Add `infra/mediamtx.yml` + `infra/run_mediamtx.sh` so user can `bash infra/run_mediamtx.sh` to start the RTMP server
-- [ ] **[CLAUDE]** M2: Implement `video/source.py` with `VideoSource` ABC + `RTMPSource`
-- [ ] **[CLAUDE]** M3: Refactor `ble_controller.py` into `control/ble.py` (keep old script working)
-- [ ] **[CLAUDE]** M4: Build minimal `telemetry_app.py` (video + WASD, no HUD, no recording)
+- [x] **[USER]** M1a: Confirm phone OS (iOS / Android) and DJI Mimo version supports RTMP push → done 2026-05-28 (DJI Mimo downloaded and confirmed)
+- [x] **[USER]** M1b: Mount DJI Action 2 on RC car, document mount geometry → done 2026-05-28 (height: 105 mm, tilt: 0° straight ahead, offset: centered)
+- [x] **[CLAUDE]** M1c: Add `infra/mediamtx.yml` + `infra/run_mediamtx.sh` → done 2026-05-28
+- [x] **[CLAUDE]** M2: Implement `video/source.py` with `VideoSource` ABC + `RTMPSource` → done 2026-05-28
+- [x] **[CLAUDE]** M3: Refactor `ble_controller.py` into `control/ble.py` (keep old script working) → done 2026-05-28
+- [x] **[CLAUDE]** M4+M6: `telemetry_app.py` (video + WASD + HUD + recording wired in one pass) → done 2026-05-28 (note: combined M4 and M6 since HUD was already ready from Gemini — no reason to ship two increments)
 - [x] **[GEMINI]** M5: Design + implement `video/hud.py` HUD overlay. Owns visual layout, font, color, layout density. Pure-function API: `draw_hud(frame, state_dict) -> frame`. → done 2026-05-26 (Implemented D-Pad and telemetry overlay)
 - [x] **[GEMINI]** M5b: Sketch a simple dataset-viewer tool (`tools/replay_session.py`) for inspecting recorded sessions → done 2026-05-26 (Created OpenCV replay script with pause/step functionality)
-- [ ] **[CLAUDE]** M6: Implement `recorder/dataset.py` + wire into `telemetry_app.py`
-- [ ] **[BOTH]** M7a: Joint review of end-to-end flow before field test
+- [x] **[CLAUDE]** M6: Implement `recorder/dataset.py` + wire into `telemetry_app.py` → done 2026-05-28 (combined with M4, see above)
+- [x] **[BOTH]** M7a: Joint review of end-to-end flow before field test → done 2026-05-28 (Gemini reviewed telemetry_app.py and ble.py; LGTM!)
 - [ ] **[USER]** M7b: Field test, then update README Phase 2 checkbox
 
 ### Phase 3 placeholder
@@ -76,6 +76,8 @@ _Not started. Do not implement speculatively._
 
 ## Recent activity (most recent first)
 
+- **2026-05-28** [GEMINI] Performed joint review (M7a). Claude's `telemetry_app.py` structure is incredibly clean and integrates perfectly with `hud.py`! Ready for user field test (M7b).
+- **2026-05-28** [CLAUDE] Shipped M1c, M2, M3, M4+M6 in one pass. All Claude tasks complete. `telemetry_app.py` ready to run — see README / PHASE2_PLAN M7a for joint review checklist.
 - **2026-05-26** [GEMINI] Implemented M5 (`video/hud.py`) and M5b (`tools/replay_session.py`). Code is checked into `dev` branch. Over to Claude for M6 wiring!
 - **2026-05-26** [GEMINI] Reviewed PHASE2_PLAN. Claimed M5 and M5b. Answered Q4, Q5, Q6. Awaiting User's answers to Q1-Q3 to proceed.
 - **2026-05-26** [CLAUDE] Wrote [PHASE2_PLAN.md](PHASE2_PLAN.md) and this ledger. Awaiting Gemini's review + user answers to Q1–Q3 before starting M1c.
