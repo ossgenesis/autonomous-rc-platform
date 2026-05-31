@@ -3,3 +3,5 @@ __pycache__/
 *.pyc
 .env
 .DS_Store
+infra/.rtmp_url
+dataset/

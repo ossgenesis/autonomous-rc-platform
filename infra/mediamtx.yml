@@ -1,0 +1,7 @@
+# MediaMTX config — minimal RTMP ingest for DJI Action 2 → DJI Mimo → laptop pipeline
+# Docs: https://github.com/bluenviron/mediamtx
+
+rtmpAddress: :1935
+
+paths:
+  live/car: {}
