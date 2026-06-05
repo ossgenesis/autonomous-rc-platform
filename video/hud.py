@@ -70,4 +70,39 @@ def draw_hud(frame: np.ndarray, state: dict) -> np.ndarray:
             cv2.rectangle(output, (bx, by), (bx + btn_size, by + btn_size), color_white, 2)
             cv2.putText(output, key.upper(), (bx + 10, by + 28), font, 0.8, color_white, 2)
 
+    # --- 4. Top Left: AI/MANUAL Mode & Confidence ---
+    mode = state.get("mode")
+    if mode:
+        # Mode Box
+        mode_color = color_green if mode == "AI" else (0, 165, 255) # Orange for manual
+        cv2.rectangle(output, (10, 10), (160, 50), color_bg, -1)
+        cv2.rectangle(output, (10, 10), (160, 50), mode_color, 2)
+        cv2.putText(output, f"MODE: {mode}", (20, 38), font, 0.7, mode_color, 2)
+
+        if mode == "AI":
+            # Inference ms
+            infer_ms = state.get("infer_ms", 0.0)
+            cv2.putText(output, f"Infer: {infer_ms:.1f}ms", (10, 70), font, 0.5, color_white, 1)
+            
+            # Confidence Bar
+            conf = state.get("confidence", 0.0)
+            ai_cmd = state.get("ai_command", "stop").upper()
+            
+            bar_w = 150
+            bar_h = 20
+            bar_x = 10
+            bar_y = 80
+            
+            # Draw background
+            cv2.rectangle(output, (bar_x, bar_y), (bar_x + bar_w, bar_y + bar_h), color_bg, -1)
+            # Draw filled portion
+            fill_w = int(bar_w * conf)
+            conf_color = color_green if conf > 0.55 else color_red
+            cv2.rectangle(output, (bar_x, bar_y), (bar_x + fill_w, bar_y + bar_h), conf_color, -1)
+            # Draw outline
+            cv2.rectangle(output, (bar_x, bar_y), (bar_x + bar_w, bar_y + bar_h), color_white, 1)
+            
+            # Draw confidence text
+            cv2.putText(output, f"AI: {ai_cmd} {conf:.0%}", (bar_x + 5, bar_y + 15), font, 0.5, color_bg if conf > 0.55 else color_white, 1)
+
     return output

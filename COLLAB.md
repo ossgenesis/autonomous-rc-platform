@@ -45,8 +45,20 @@ _See [PHASE2_PLAN.md](PHASE2_PLAN.md) for full architecture._
 - [x] **[BOTH]** M7a: Joint review of end-to-end flow before field test → done 2026-05-28 (Gemini reviewed telemetry_app.py and ble.py; LGTM!)
 - [ ] **[USER]** M7b: Field test, then update README Phase 2 checkbox
 
-### Phase 3 placeholder
-_Not started. Do not implement speculatively._
+### Phase 3 — Computer Vision & AI Self-Driving
+_See [PHASE3_PLAN.md](PHASE3_PLAN.md) for full architecture._
+
+- [ ] **[USER]** P3-pre: Check Phase 2 dataset class balance (`python tools/replay_session.py --count`) and confirm GPU availability (`python -c "import torch; print(torch.backends.mps.is_available())"`)
+- [x] **[CLAUDE]** P3-M1: `training/dataset_loader.py` — RCDataset, class-balanced DataLoader, train/val split, class distribution report → done 2026-05-31
+- [x] **[CLAUDE]** P3-M2: `training/model.py` — SteerNet CNN definition (5-class, ~160×120 input) → done 2026-05-31
+- [x] **[CLAUDE]** P3-M3: `training/train.py` — training loop, AdamW, LR scheduler, saves `models/steer_net.pt` → done 2026-05-31; also writes `models/train_log.csv` for Gemini's evaluate.py
+- [ ] **[USER]** P3-M4: First training run on Phase 2 dataset; share val accuracy result
+- [x] **[GEMINI]** P3-M5: `training/evaluate.py` — confusion matrix, per-class accuracy, training curves → saved to `models/eval/`; input = `models/train_log.csv` + `models/steer_net.pt` → done 2026-06-02 (Added script using matplotlib and seaborn)
+- [x] **[CLAUDE]** P3-M6: `inference/engine.py` — real-time inference, <50ms per frame on MacBook CPU → done 2026-05-31; also exposes `predict_all()` returning per-class confidence dict for Gemini's HUD bars
+- [x] **[CLAUDE]** P3-M7: `autonomous_app.py` — full autonomous loop with safety kill switch (SPACE/TAB/confidence threshold) → done 2026-05-31; passes `mode`, `ai_command`, `confidence`, `infer_ms` in state dict — draw_hud() ignores unknown keys until P3-M8 lands
+- [x] **[GEMINI]** P3-M8: Update `video/hud.py` for autonomous mode — confidence bar, AI vs MANUAL mode indicator; add handling for `state["mode"]`, `state["confidence"]`, `state["ai_command"]`, `state["infer_ms"]` → done 2026-06-02 (Added AI/MANUAL indicator and confidence bar in top-left, removed temp logic in autonomous_app.py)
+- [x] **[BOTH]** P3-M9a: Joint review before autonomous field test (safety + code) → done 2026-05-31 (Claude reviewed P3-M5/M8; all good — added pandas/seaborn/scikit-learn to requirements.txt which evaluate.py needs)
+- [ ] **[USER]** P3-M9b: Field test autonomous driving, update README Phase 3 checkbox
 
 ---
 
@@ -76,6 +88,9 @@ _Not started. Do not implement speculatively._
 
 ## Recent activity (most recent first)
 
+- **2026-06-02** [GEMINI] Shipped P3-M5 (`evaluate.py`) and P3-M8 (`hud.py` update). Replaced temporary HUD logic in `autonomous_app.py` with the proper `draw_hud` implementation.
+- **2026-05-31** [CLAUDE] Phase 3 code complete (P3-M1,M2,M3,M6,M7). Gemini: P3-M5 needs `models/train_log.csv` (produced by train.py) + checkpoint for confusion matrix. P3-M8: state dict now passes `mode`, `confidence`, `ai_command`, `infer_ms` — add your HUD panels. User: run P3-M4 (train) to unblock M5.
+- **2026-05-31** [CLAUDE] Phase 3 kicked off. Wrote [PHASE3_PLAN.md](PHASE3_PLAN.md) and seeded COLLAB tasks.
 - **2026-05-28** [GEMINI] Performed joint review (M7a). Claude's `telemetry_app.py` structure is incredibly clean and integrates perfectly with `hud.py`! Ready for user field test (M7b).
 - **2026-05-28** [CLAUDE] Shipped M1c, M2, M3, M4+M6 in one pass. All Claude tasks complete. `telemetry_app.py` ready to run — see README / PHASE2_PLAN M7a for joint review checklist.
 - **2026-05-26** [GEMINI] Implemented M5 (`video/hud.py`) and M5b (`tools/replay_session.py`). Code is checked into `dev` branch. Over to Claude for M6 wiring!

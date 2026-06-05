@@ -4,8 +4,8 @@ RC Car FPV telemetry app.
 Usage:
     python telemetry_app.py [--rtmp URL] [--no-ble]
 
-Controls (terminal window must be focused):
-    W / A / S / D  — drive
+Controls:
+    W / A / S / D  — drive (hold multiple keys for diagonal: W+A, W+D, etc.)
     SPACE          — stop
     R              — toggle dataset recording
     X or Q         — quit
@@ -19,16 +19,15 @@ Then set DJI Mimo live-stream URL to what the script prints.
 import argparse
 import asyncio
 import os
-import sys
+import threading
 import time
-import tty
-import termios
 from datetime import datetime
 from typing import Optional
 
 import cv2
 import numpy as np
 from bleak import BleakClient
+from pynput import keyboard as pynput_kb
 
 from control.ble import BLEController, DEVICE_UUID
 from video.source import RTMPSource
@@ -46,6 +45,7 @@ MOUNT_META = {
 
 _URL_FILE = os.path.join(os.path.dirname(__file__), "infra", ".rtmp_url")
 
+
 def _default_rtmp() -> str:
     try:
         url = open(_URL_FILE).read().strip()
@@ -55,84 +55,81 @@ def _default_rtmp() -> str:
         pass
     return "rtmp://localhost/live/car"
 
+
 DEFAULT_RTMP = _default_rtmp()
 
 # ---------------------------------------------------------------------------
-# Shared mutable state (all writes from asyncio main thread or executor pool)
+# Shared mutable state
 # ---------------------------------------------------------------------------
 ble = BLEController()
 _running = True
 _recording = False
-_recorder = None  # type: Optional[DataRecorder]
+_recorder: Optional[DataRecorder] = None
+_rec_lock = threading.Lock()
 
 
-def _get_char() -> str:
-    fd = sys.stdin.fileno()
-    old = termios.tcgetattr(fd)
-    try:
-        tty.setraw(fd)
-        return sys.stdin.read(1)
-    finally:
-        termios.tcsetattr(fd, termios.TCSADRAIN, old)
+def _toggle_recording():
+    global _recording, _recorder
+    with _rec_lock:
+        _recording = not _recording
+        if _recording and _recorder is None:
+            session_id = datetime.now().strftime("%Y%m%dT%H%M%S")
+            _recorder = DataRecorder(f"dataset/{session_id}")
+            _recorder.write_meta(MOUNT_META)
+            print(f"\r\n[REC] Recording → dataset/{session_id}")
+        elif _recording:
+            print("\r\n[REC] Resumed")
+        else:
+            print("\r\n[REC] Paused")
 
 
-async def _keyboard_loop():
-    global _running, _recording, _recorder
-    loop = asyncio.get_running_loop()
-    while _running:
-        ch = await loop.run_in_executor(None, _get_char)
-        ch = ch.lower()
+def _make_listener() -> pynput_kb.Listener:
+    def on_press(key):
+        global _running
+        try:
+            ch = key.char.lower()
+        except AttributeError:
+            ch = None
+
         if ch in ('x', 'q'):
             _running = False
         elif ch in ('w', 'a', 's', 'd'):
-            ble.set_command(ch)
-        elif ch == ' ':
-            ble.set_command('stop')
+            ble.press(ch)
         elif ch == 'r':
-            _recording = not _recording
-            if _recording:
-                if _recorder is None:
-                    session_id = datetime.now().strftime("%Y%m%dT%H%M%S")
-                    _recorder = DataRecorder(f"dataset/{session_id}")
-                    _recorder.write_meta(MOUNT_META)
-                    print(f"\r\n[REC] Recording → dataset/{session_id}")
-                else:
-                    print("\r\n[REC] Resumed")
-            else:
-                print("\r\n[REC] Paused")
+            _toggle_recording()
+        elif key == pynput_kb.Key.space:
+            ble.release_all()
+
+    def on_release(key):
+        try:
+            ch = key.char.lower()
+        except AttributeError:
+            return
+        if ch in ('w', 'a', 's', 'd'):
+            ble.release(ch)
+
+    return pynput_kb.Listener(on_press=on_press, on_release=on_release)
 
 
 async def _run(rtmp_url: str, skip_ble: bool):
-    global _running, _recording, _recorder
+    global _running, _recorder
 
     source = RTMPSource(rtmp_url)
     loop = asyncio.get_running_loop()
 
-    async def _with_ble(fn):
-        print("Connecting to RC car via Bluetooth…")
-        async with BleakClient(DEVICE_UUID) as client:
-            print("BLE connected.")
-            ble_task = asyncio.create_task(ble.run(client))
-            await fn()
-            ble_task.cancel()
-            await asyncio.gather(ble_task, return_exceptions=True)
-
-    async def _without_ble(fn):
-        ble.link_state = "DISABLED"
-        await fn()
+    listener = _make_listener()
+    listener.start()
 
     print(f"Opening stream: {rtmp_url}")
-    print("Controls: W/A/S/D = drive  SPACE = stop  R = record  X/Q = quit\n")
+    print("Controls: W/A/S/D = drive (hold combos OK)  SPACE = stop  R = record  X/Q = quit\n")
 
-    fps_tracker_count = 0
-    fps_tracker_t = time.monotonic()
+    fps_count = 0
+    fps_t = time.monotonic()
     fps = 0.0
 
-    kb_task = asyncio.create_task(_keyboard_loop())
-
     async def main_loop():
-        global _running, _recording, _recorder
-        nonlocal fps, fps_tracker_count, fps_tracker_t
+        global _running, _recorder
+        nonlocal fps, fps_count, fps_t
 
         while _running:
             ok, frame = await loop.run_in_executor(None, source.read)
@@ -150,28 +147,31 @@ async def _run(rtmp_url: str, skip_ble: bool):
                     _running = False
                 continue
 
-            # FPS — rolling 1-second window
-            fps_tracker_count += 1
+            fps_count += 1
             now = time.monotonic()
-            if now - fps_tracker_t >= 1.0:
-                fps = fps_tracker_count / (now - fps_tracker_t)
-                fps_tracker_count = 0
-                fps_tracker_t = now
+            if now - fps_t >= 1.0:
+                fps = fps_count / (now - fps_t)
+                fps_count = 0
+                fps_t = now
 
             ts_ns = time.monotonic_ns()
 
-            if _recording and _recorder is not None:
-                frame_count = _recorder.record(frame, ble.current_key, ts_ns)
+            with _rec_lock:
+                recording_now = _recording
+                rec = _recorder
+
+            if recording_now and rec is not None:
+                frame_count = rec.record(frame, ble.current_key, ts_ns)
             else:
-                frame_count = _recorder.frame_count if _recorder else 0
+                frame_count = rec.frame_count if rec else 0
 
             state = {
-                "command":    ble.current_key,
-                "recording":  _recording,
+                "command":     ble.current_key,
+                "recording":   recording_now,
                 "frame_count": frame_count,
-                "fps":        fps,
-                "ble_status": ble.link_state,
-                "latency_ms": MOUNT_META["rtmp_nominal_latency_ms"],
+                "fps":         fps,
+                "ble_status":  ble.link_state,
+                "latency_ms":  MOUNT_META["rtmp_nominal_latency_ms"],
             }
 
             display = draw_hud(frame, state)
@@ -179,17 +179,31 @@ async def _run(rtmp_url: str, skip_ble: bool):
             if cv2.waitKey(1) & 0xFF == ord('q'):
                 _running = False
 
-        kb_task.cancel()
-        await asyncio.gather(kb_task, return_exceptions=True)
+    async def _with_ble():
+        print("Connecting to RC car via Bluetooth…")
+        async with BleakClient(DEVICE_UUID) as client:
+            print("BLE connected.")
+            ble_task = asyncio.create_task(ble.run(client))
+            await main_loop()
+            ble_task.cancel()
+            await asyncio.gather(ble_task, return_exceptions=True)
+
+    async def _without_ble():
+        ble.link_state = "DISABLED"
+        await main_loop()
 
     if skip_ble:
-        await _without_ble(main_loop)
+        await _without_ble()
     else:
-        await _with_ble(main_loop)
+        await _with_ble()
 
-    if _recorder:
-        _recorder.close()
-        print(f"\r\nDataset saved ({_recorder.frame_count} frames).")
+    listener.stop()
+
+    with _rec_lock:
+        rec = _recorder
+    if rec:
+        rec.close()
+        print(f"\r\nDataset saved ({rec.frame_count} frames).")
 
     source.release()
     cv2.destroyAllWindows()
