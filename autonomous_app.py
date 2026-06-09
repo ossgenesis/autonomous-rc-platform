@@ -29,7 +29,7 @@ from pynput import keyboard as pynput_kb
 from control.ble import BLEController, DEVICE_UUID
 from video.source import RTMPSource
 from video.hud import draw_hud
-from inference.engine import DEFAULT_CONFIDENCE_THRESHOLD, InferenceEngine
+from inference.engine import DEFAULT_CONFIDENCE_THRESHOLD, DEFAULT_STOP_BIAS, InferenceEngine
 
 _URL_FILE = os.path.join(os.path.dirname(__file__), "infra", ".rtmp_url")
 
@@ -50,6 +50,7 @@ _running = True
 _mode = "MANUAL"
 _last_ai_cmd = "stop"
 _last_confidence = 0.0
+_engine: "InferenceEngine | None" = None
 
 
 def _make_listener() -> pynput_kb.Listener:
@@ -65,6 +66,9 @@ def _make_listener() -> pynput_kb.Listener:
         elif ch in ('w', 'a', 's', 'd'):
             _mode = "MANUAL"
             ble.press(ch)
+        elif ch == 'g' and _mode == "AI" and _engine is not None:
+            _engine.nudge(seconds=3)
+            print("\r\n[NUDGE] Stop suppressed for 3s")
         elif key == pynput_kb.Key.space:
             ble.release_all()
             print("\r\n[STOP] Emergency stop")
@@ -84,12 +88,13 @@ def _make_listener() -> pynput_kb.Listener:
     return pynput_kb.Listener(on_press=on_press, on_release=on_release)
 
 
-async def _run(rtmp_url: str, model_path: str, threshold: float):
-    global _running, _mode, _last_ai_cmd, _last_confidence
+async def _run(rtmp_url: str, model_path: str, threshold: float, stop_bias: float):
+    global _running, _mode, _last_ai_cmd, _last_confidence, _engine
 
     print(f"Loading model: {model_path}")
-    engine = InferenceEngine(model_path, confidence_threshold=threshold)
-    print(f"Model loaded on {engine.device}")
+    engine = InferenceEngine(model_path, confidence_threshold=threshold, stop_bias=stop_bias)
+    _engine = engine
+    print(f"Model loaded on {engine.device}  (stop_bias={stop_bias}, threshold={threshold})")
 
     source = RTMPSource(rtmp_url)
     loop = asyncio.get_running_loop()
@@ -137,7 +142,7 @@ async def _run(rtmp_url: str, model_path: str, threshold: float):
                 "fps":         fps,
                 "ble_status":  ble.link_state,
                 "latency_ms":  2000,
-                "mode":        _mode,
+                "mode":        "AI+NUDGE" if (_mode == "AI" and engine.is_nudging) else _mode,
                 "ai_command":  _last_ai_cmd,
                 "confidence":  _last_confidence,
                 "infer_ms":    engine.latency_ms,
@@ -162,6 +167,8 @@ def main():
     parser.add_argument("--model",     default="models/steer_net.pt", help="Path to trained checkpoint")
     parser.add_argument("--threshold", type=float, default=DEFAULT_CONFIDENCE_THRESHOLD,
                         help="Confidence threshold below which AI sends 'stop'")
+    parser.add_argument("--stop-bias", type=float, default=DEFAULT_STOP_BIAS,
+                        help="Scale factor for stop logit (0=never stop, 1=unmodified). Default 0.4")
     args = parser.parse_args()
 
     if not os.path.exists(args.model):
@@ -169,7 +176,7 @@ def main():
         print("Train it first:  python training/train.py")
         import sys; sys.exit(1)
 
-    asyncio.run(_run(args.rtmp, args.model, args.threshold))
+    asyncio.run(_run(args.rtmp, args.model, args.threshold, args.stop_bias))
 
 
 if __name__ == "__main__":
